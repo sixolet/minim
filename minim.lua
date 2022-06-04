@@ -5,6 +5,8 @@ music = require 'musicutil'
 er = require 'er'
 lattice = require 'lattice'
 
+engine.name="FormAndVoid"
+
 g = grid.connect()
 
 
@@ -16,8 +18,8 @@ for i, v in pairs(music.SCALES) do
 end
 
 function format_chord_option(i, n)
-    scale = music.generate_scale_of_length(params:get("root"), SCALE_NAMES[params:get("scale")], 7)
-    chords = music.chord_types_for_note(scale[i], params:get("root"), SCALE_NAMES[params:get("scale")])
+    local scale = music.generate_scale_of_length(params:get("root"), SCALE_NAMES[params:get("scale")], 7)
+    local chords = music.chord_types_for_note(scale[i], params:get("root"), SCALE_NAMES[params:get("scale")])
     return chords[util.wrap(n, 1, #chords)]
 end
 
@@ -55,6 +57,7 @@ function set_up_triggers(name, magic_number, default_division, default_chord, de
             if params:get(name .. " play chord") == 1 then
             end
             if params:get(name .. " play arp") == 1 then
+                arp_section:play(0.5)
             end            
         end,
     }
@@ -85,7 +88,6 @@ function set_up_triggers(name, magic_number, default_division, default_chord, de
     params:add_binary(name .. " reset arp", "reset arp", "toggle", default_chord)
     return triggers
 end
-    
 
 function set_up_section(sect, play_step, default_chord)
     params:add_separator(sect)
@@ -95,7 +97,8 @@ function set_up_section(sect, play_step, default_chord)
     params:hide(sect .. " pos")
     params:add_group(sect .. " sequence", 8)
     for i=1,8,1 do
-        params:add_number(sect .. " step ".. i, sect .. " step ".. i, 0, 7, 0)
+        params:add_number(sect .. " step ".. i, sect .. " step ".. i, 1, 7, 1)
+        params:add_option(sect .. " vel ".. i, sect .. " vel ".. i, {"mute", "note", "accent"}, 2)
     end
     params:add_group(sect .. " chords", 7)
     for i=1,7,1 do
@@ -129,6 +132,25 @@ function set_up_section(sect, play_step, default_chord)
             clock.sleep(0.005)
             self.ignore_advance = nil
         end)
+    end
+    function section:chord(num_notes)
+        -- Always get the chord from the chord section
+        local i = chord_section:step(chord_section:pos())
+        -- But the chord type from this section
+        if i == 0 then return nil end
+        local n = params:get(sect .. " chord " .. i)
+        local chord_type = format_chord_option(i, n)
+        local scale = music.generate_scale_of_length(params:get("root"), SCALE_NAMES[params:get("scale")], 7)
+        local chord = music.generate_chord(scale[i], chord_type)
+        while #chord > num_notes do
+            table.remove(chord, 2)
+        end
+        local i = 1
+        while #chord < num_notes do
+            table.insert(chord, chord[i] + 12)
+            i = i + 1
+        end
+        return chord
     end
     function section:handle_loop_key(y, z)
         if self.loop_key == nil and z == 1 then
@@ -176,8 +198,12 @@ function grid_redraw()
     end
     for i=1,8,1 do
         local s = chord_section:step(i)
+        local brightness = params:get("chord vel "..i)*3
+        if arp_section:pos() == i then
+            brightness = brightness + 5
+        end        
         if s > 0 then
-            g:led(s, i, 12)
+            g:led(s, i, brightness)
         end
     end
     for i=1,8,1 do
@@ -193,8 +219,12 @@ function grid_redraw()
     end
     for i=1,8,1 do
         local s = arp_section:step(i)
+        local brightness = params:get("arp vel "..i)*3
+        if arp_section:pos() == i then
+            brightness = brightness + 5
+        end
         if s > 0 then
-            g:led(s+9, i, 12)
+            g:led(s+9, i, brightness)
         end
     end
     for i=1,8,1 do
@@ -211,7 +241,7 @@ function g.key(x, y, z)
     if x < 8 and z == 1 then
         -- chord step
         if x == chord_section:step(y) then
-            params:set("chord step "..y, 0)
+            params:set("chord vel "..y, util.wrap(params:get("chord vel "..y) + 1, 1, 3))
         else
             params:set("chord step ".. y, x)
         end
@@ -225,7 +255,7 @@ function g.key(x, y, z)
     elseif x > 9 and z == 1 then
         -- arp step
         if x - 9 == arp_section:step(y) then
-            params:set("arp step "..y, 0)
+            params:set("arp vel "..y, util.wrap(params:get("arp vel "..y) + 1, 1, 3))
         else
             params:set("arp step ".. y, x - 9)
         end
@@ -258,10 +288,17 @@ function init()
     
     chord_section = set_up_section("chord", nil, 1)
     arp_section = set_up_section("arp", nil, 2)
+    function arp_section:play(duration)
+        local idx = self:step(self:pos())
+        if idx == 0 then return end
+        local chord = self:chord(7)
+        local note = chord[idx]
+        engine.play(1, music.note_num_to_freq(note), 0.5, duration)
+    end
+    params:add_separator("rhythm")
     r1 = set_up_triggers("rhythm 1", 1, 7, 1, 0)
     r2 = set_up_triggers("rhythm 2", 2, 3, 0, 1)    
-    r3 = set_up_triggers("rhythm 3", 3, 4, 0, 0)    
-
+    r3 = set_up_triggers("rhythm 3", 3, 4, 0, 0)
     params:bang()
     L:start()
     clock.run(grid_clock)
