@@ -1,5 +1,5 @@
 Engine_FormAndVoid : CroneEngine {
-    var <timbres, <bus, <eoc, <lfoGroup, <lfos, <lfoBusses, <noteGroup;
+    var <timbres, <bus, <eoc, <lfoGroup, <lfos, <lfoBusses, <noteGroups, <noteContainer;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -8,7 +8,12 @@ Engine_FormAndVoid : CroneEngine {
 	alloc {
 	    bus = Bus.audio(Server.default, 2);
 	    lfoGroup = Group.new;
-	    noteGroup = Group.after(lfoGroup);
+	    noteContainer = Group.after(lfoGroup);
+	    noteGroups = [nil, nil, nil, nil];
+	    4.do { |i|
+	        noteGroups[i] = Group.tail(noteContainer);
+	    };
+	    noteGroups.postln;
 	    lfoBusses = 4.collect {Bus.control(Server.default, 1)};
 	    lfos = 4.collect { |i|
 	        { |lfoFreq|
@@ -16,7 +21,7 @@ Engine_FormAndVoid : CroneEngine {
 	        }.play(target: lfoGroup);
 	    };
 	    timbres = 4.collect { |i|
-	      ( instrument: \form, freq: 440, amp: 1, pan: 0, out: bus, group: noteGroup,
+	      ( instrument: \form, freq: 440, amp: 1, pan: 0, out: bus, group: noteGroups[i],
 	        a1: 0.1, d1: 0.3, s1: 0.5, r1: 0.4,
 	        a2: 0.3, d2: 0.5, s2: 0.8, r2: 0.4,
 	        f0Amp: 0.5,
@@ -69,7 +74,6 @@ Engine_FormAndVoid : CroneEngine {
             event.freq = freq;
             event.amp = amp;
             event.dur = dur;
-            event.postln;
             event.play;
         });
 		this.addCommand("tempo_sync", "ff", { arg msg;
@@ -96,6 +100,7 @@ Engine_FormAndVoid : CroneEngine {
                 lfos[timbre].set(key, val);
             }, {
                 timbres[timbre][key] = val;
+                noteGroups[timbre].set(key, val);
             });
         });
         
@@ -103,15 +108,16 @@ Engine_FormAndVoid : CroneEngine {
             var snd = In.ar(bus, 2);
             snd = 0.5*snd;
             snd.tanh;
-        }.play(addAction: \addAfter, target: noteGroup);
+        }.play(addAction: \addAfter, target: noteContainer);
     }
     
     free {
         lfoGroup.free;
-        noteGroup.free;
+        noteGroups.do { |g| g.free };
+        noteContainer.free;
         eoc.free;
         bus.free;
-        lfoBusses.do { |b| b.free }
+        lfoBusses.do { |b| b.free };
     }
 	
 }

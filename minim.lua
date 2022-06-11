@@ -4,12 +4,14 @@
 music = require 'musicutil'
 er = require 'er'
 lattice = require 'lattice'
+include 'lib/notes'
+
 
 engine.name="FormAndVoid"
 
 g = grid.connect()
 
-
+OUTPUTS = { 'chord timbre', 'arp timbre', 'other timbre', 'midi', 'crow 1,2', 'crow 3,4', 'crow 1-3,4', 'crow 1-4', 'just friends', 'w/syn'}
 DIVISIONS =    {'semiquaver', 'quaver triplet', 'quaver', 'triplet', 'crochet', 'minim', 'semibreve', 'breve', 'longa'}
 DIVISION_VAL = {1/16,        1/12,            1/8,      1/6,       1/4,       1/2,    1,        2,           4}
 SCALE_NAMES = {}
@@ -54,17 +56,20 @@ function set_up_triggers(name, magic_number, default_division, default_chord, de
     L.pattern_id_counter = 30 + magic_number
     triggers.play = L:new_pattern{
         action = function (t)
+            local player = notes.play[params:get("output ".. magic_number)]
+            player = wrap_player(player, triggers.play.division*4*params:get(name .. " note dur"), magic_number)
             if params:get(name .. " play chord") == 1 then
-                chord_section:play(triggers.play.division*4*params:get(name .. " note dur"))
+                chord_section:play(player)
             end
             if params:get(name .. " play arp") == 1 then
-                arp_section:play(triggers.play.division*4*params:get(name .. " note dur"))
+                arp_section:play(player)
             end            
         end,
     }
     L.pattern_id_counter = stored_counter
     
-    params:add_group(name, 9)
+    params:add_group(name, 10)
+    params:add_option("output " .. magic_number, "output", VOICES, magic_number)
     params:add_option(name .. " division", "division", DIVISIONS, default_division)
     params:set_action(name .. " division", function (d)
         local division = DIVISION_VAL[d]
@@ -101,106 +106,6 @@ end
 	        --lfoF0Amp: 0, lfoF1:  -0.2, lfoF1Amp: 0, lfoF2: 0, lfoF2Amp: 0"
 
 
-function set_up_timbre_attr(sect, timbre_n, name, key, cspec)
-    params:add_control(sect .. " " .. name, name, cspec)
-    params:set_action(sect .. " " .. name, function(val)
-        engine.set(timbre_n, key, val)
-    end)
-end
-
-function set_up_chord_timbre()
-    local sect = "chord"
-    local n = 0
-    params:add_group("chord timbre", 34)
-    params:add_separator("formants")
-    local f1 = controlspec.FREQ:copy()
-    f1.default = 700
-    set_up_timbre_attr(sect, n, "formant 1", "f1", f1)
-    local f2 = controlspec.FREQ:copy()
-    f2.default = 1000
-    set_up_timbre_attr(sect, n, "formant 2", "f2", f2)
-    set_up_timbre_attr(sect, n, "formant 1 amp", "f1Amp", controlspec.new(0, 1, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "formant 2 amp", "f2Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "formant 1 wave", "f1Res", controlspec.new(0.05, 1, 'lin', 0, 0.6))
-    set_up_timbre_attr(sect, n, "formant 2 wave", "f2Res", controlspec.new(0.05, 1, 'lin', 0, 0.2))
-    set_up_timbre_attr(sect, n, "fundamental amp", "f0Amp", controlspec.new(0, 1, 'lin', 0, 0.4))
-    params:add_separator("modulations")
-    set_up_timbre_attr(sect, n, "attack 1", "a1", controlspec.new(0.001, 4, 'exp', 0, 0.5))
-    set_up_timbre_attr(sect, n, "decay 1", "d1", controlspec.new(0.001, 4, 'exp', 0, 0.4))
-    set_up_timbre_attr(sect, n, "sustain 1", "s1", controlspec.new(0, 1, 'lin', 0, 0.9))
-    set_up_timbre_attr(sect, n, "release 1", "r1", controlspec.new(0.001, 4, 'exp', 0, 2))
-    set_up_timbre_attr(sect, n, "attack 2", "a2", controlspec.new(0.001, 4, 'exp', 0, 2))
-    set_up_timbre_attr(sect, n, "decay 2", "d2", controlspec.new(0.001, 4, 'exp', 0, 1))
-    set_up_timbre_attr(sect, n, "sustain 2", "s2", controlspec.new(0, 1, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "release 2", "r2", controlspec.new(0.001, 4, 'exp', 0, 0.5))
-    local lowfreq = controlspec.LOFREQ:copy()
-    lowfreq.default = 3
-    set_up_timbre_attr(sect, n, "lfo freq", "lfoFreq", lowfreq)
-    params:add_separator("matrix")
-    set_up_timbre_attr(sect, n, "env 1 to fundamental amp", "e1F0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 1 to formant 1", "e1F1", controlspec.new(-0.8, 2, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "env 1 to formant 1 amp", "e1F1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 1 to formant 2", "e1F2", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "env 1 to formant 2 amp", "e1F2Amp", controlspec.new(0, 1, 'lin', 0, 0.0))
-    
-    set_up_timbre_attr(sect, n, "env 2 to fundamental amp", "e2F0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 2 to formant 1", "e2F1", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "env 2 to formant 1 amp", "e2F1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 2 to formant 2", "e2F2", controlspec.new(-0.8, 2, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "env 2 to formant 2 amp", "e2F2Amp", controlspec.new(0, 1, 'lin', 0, 0))   
-    
-    set_up_timbre_attr(sect, n, "lfo to fundamental amp", "lfoF0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "lfo to formant 1", "lfoF1", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "lfo to formant 1 amp", "lfoF1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "lfo to formant 2", "lfoF2", controlspec.new(-0.8, 2, 'lin', 0, 0))
-    set_up_timbre_attr(sect, n, "lfo to formant 2 amp", "lfoF2Amp", controlspec.new(0, 1, 'lin', 0, 0.0))    
-end
-
-function set_up_arp_timbre()
-    local sect = "arp"
-    local n = 1
-    params:add_group("arp timbre", 34)
-    params:add_separator("formants")
-    local f1 = controlspec.FREQ:copy()
-    f1.default = 450
-    set_up_timbre_attr(sect, n, "formant 1", "f1", f1)
-    local f2 = controlspec.FREQ:copy()
-    f2.default = 1400
-    set_up_timbre_attr(sect, n, "formant 2", "f2", f2)
-    set_up_timbre_attr(sect, n, "formant 1 amp", "f1Amp", controlspec.new(0, 1, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "formant 2 amp", "f2Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "formant 1 wave", "f1Res", controlspec.new(0.05, 1, 'lin', 0, 0.6))
-    set_up_timbre_attr(sect, n, "formant 2 wave", "f2Res", controlspec.new(0.05, 1, 'lin', 0, 0.2))
-    set_up_timbre_attr(sect, n, "fundamental amp", "f0Amp", controlspec.new(0, 1, 'lin', 0, 0.4))
-    params:add_separator("modulations")
-    set_up_timbre_attr(sect, n, "attack 1", "a1", controlspec.new(0.001, 4, 'exp', 0, 0.01))
-    set_up_timbre_attr(sect, n, "decay 1", "d1", controlspec.new(0.001, 4, 'exp', 0, 0.5))
-    set_up_timbre_attr(sect, n, "sustain 1", "s1", controlspec.new(0, 1, 'lin', 0, 0.3))
-    set_up_timbre_attr(sect, n, "release 1", "r1", controlspec.new(0.001, 4, 'exp', 0, 0.2))
-    set_up_timbre_attr(sect, n, "attack 2", "a2", controlspec.new(0.001, 4, 'exp', 0, 0.01))
-    set_up_timbre_attr(sect, n, "decay 2", "d2", controlspec.new(0.001, 4, 'exp', 0, 0.3))
-    set_up_timbre_attr(sect, n, "sustain 2", "s2", controlspec.new(0, 1, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "release 2", "r2", controlspec.new(0.001, 4, 'exp', 0, 0.2))
-    set_up_timbre_attr(sect, n, "lfo freq", "lfoFreq", controlspec.LOFREQ)
-    params:add_separator("matrix")
-    set_up_timbre_attr(sect, n, "env 1 to fundamental amp", "e1F0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 1 to formant 1", "e1F1", controlspec.new(-0.8, 2, 'lin', 0, 0.5))
-    set_up_timbre_attr(sect, n, "env 1 to formant 1 amp", "e1F1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 1 to formant 2", "e1F2", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "env 1 to formant 2 amp", "e1F2Amp", controlspec.new(0, 1, 'lin', 0, 0.5))
-    
-    set_up_timbre_attr(sect, n, "env 2 to fundamental amp", "e2F0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 2 to formant 1", "e2F1", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "env 2 to formant 1 amp", "e2F1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "env 2 to formant 2", "e2F2", controlspec.new(-0.8, 2, 'lin', 0, 1))
-    set_up_timbre_attr(sect, n, "env 2 to formant 2 amp", "e2F2Amp", controlspec.new(0, 1, 'lin', 0, 0))   
-    
-    set_up_timbre_attr(sect, n, "lfo to fundamental amp", "lfoF0Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "lfo to formant 1", "lfoF1", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
-    set_up_timbre_attr(sect, n, "lfo to formant 1 amp", "lfoF1Amp", controlspec.UNIPOLAR)
-    set_up_timbre_attr(sect, n, "lfo to formant 2", "lfoF2", controlspec.new(-0.8, 2, 'lin', 0, 0))
-    set_up_timbre_attr(sect, n, "lfo to formant 2 amp", "lfoF2Amp", controlspec.new(0, 1, 'lin', 0, 0))      
-end
 
 function set_up_section(sect, play_step, default_chord)
     params:add_separator(sect)
@@ -255,11 +160,13 @@ function set_up_section(sect, play_step, default_chord)
         local chord_type = format_chord_option(i, n)
         local scale = music.generate_scale_of_length(params:get("root"), SCALE_NAMES[params:get("scale")], 7)
         local chord = music.generate_chord(scale[i], chord_type)
-        while #chord > num_notes do
-            table.remove(chord, 2)
-        end
         local i = 1
-        while #chord < num_notes do
+        while #chord > num_notes and i < 10 do
+            table.remove(chord, 2)
+            i = i + 1
+        end
+        i = 1
+        while #chord < num_notes and i < 10 do
             table.insert(chord, chord[i] + 12)
             i = i + 1
         end
@@ -400,7 +307,7 @@ end
 
 function init()
     L = lattice:new{
-        ppqn = 48,
+        ppqn = 96,
     }
     clock.run(sync_every_beat)
     params:add_number("meter", "meter", 2, 12, 4)
@@ -411,32 +318,40 @@ function init()
     params:add_number("root", "root", 36, 60, 48, function(n) return music.note_num_to_name(n:get(), true) end)
     
     chord_section = set_up_section("chord", nil, 1)
-    set_up_chord_timbre()
     arp_section = set_up_section("arp", nil, 2)
-    set_up_arp_timbre()
-    function arp_section:play(duration)
+    function arp_section:play(player)
         local idx = self:step(self:pos())
         if idx == 0 then return end
-        local vel = 0.35*(params:get("arp vel "..self:pos())-1)
+        local vel = math.floor(127*0.35*(params:get("arp vel "..self:pos())-1))
         local chord = self:chord(7)
         local note = chord[idx]
-        engine.play(1, music.note_num_to_freq(note), vel, duration)
+        player(note, vel, 1)
     end
-    function chord_section:play(duration)
+    function chord_section:play(player)
         local chord = self:chord(4)
-        local vel = 0.35*(params:get("chord vel "..self:pos())-1)
+        local vel = math.floor(127*0.35*(params:get("chord vel "..self:pos())-1))
         for i=1,4,1 do
             local note = chord[i]
-            engine.play(0, music.note_num_to_freq(note), vel, duration)        
+            player(note, vel, i+1)
         end
     end
     params:add_separator("rhythm")
     r1 = set_up_triggers("rhythm 1", 1, 7, 1, 0)
     r2 = set_up_triggers("rhythm 2", 2, 3, 0, 1)    
     r3 = set_up_triggers("rhythm 3", 3, 4, 0, 0)
+    r4 = set_up_triggers("rhythm 4", 4, 4, 0, 0)
+    params:add_separator("timbre")
+    notes.init()
+    params:read()
     params:bang()
     L:start()
     clock.run(grid_clock)
+end
+
+function wrap_player(player, length, channel)
+    return function(note, vel, track)
+        player(note, vel, length, channel, track)
+    end
 end
 
 function cleanup()
