@@ -68,7 +68,7 @@ Engine_FormAndVoid : CroneEngine {
             var event = Event.new(proto: proto);
             event.freq = freq;
             event.amp = amp;
-            event.duration = dur;
+            event.dur = dur;
             event.postln;
             event.play;
         });

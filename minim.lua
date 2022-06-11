@@ -64,7 +64,7 @@ function set_up_triggers(name, magic_number, default_division, default_chord, de
     }
     L.pattern_id_counter = stored_counter
     
-    params:add_group(name, 8)
+    params:add_group(name, 9)
     params:add_option(name .. " division", "division", DIVISIONS, default_division)
     params:set_action(name .. " division", function (d)
         local division = DIVISION_VAL[d]
