@@ -1,5 +1,6 @@
 Engine_FormAndVoid : CroneEngine {
-    var <timbres, <bus, <eoc, <lfoGroup, <lfos, <lfoBusses, <noteGroups, <noteContainer;
+    const <numVoices = 8;
+    var <timbres, <bus, <eoc, <lfoGroup, <lfos, <lfoBusses, <noteGroups, <noteContainer, <noteTracker;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -9,25 +10,27 @@ Engine_FormAndVoid : CroneEngine {
 	    bus = Bus.audio(Server.default, 2);
 	    lfoGroup = Group.new;
 	    noteContainer = Group.after(lfoGroup);
-	    noteGroups = [nil, nil, nil, nil];
-	    4.do { |i|
+	    noteGroups = nil!numVoices;
+	    noteTracker = nil!numVoices;
+	    numVoices.do { |i|
 	        noteGroups[i] = Group.tail(noteContainer);
+	        noteTracker[i] = Dictionary.new;
 	    };
 	    noteGroups.postln;
-	    lfoBusses = 4.collect {Bus.control(Server.default, 1)};
-	    lfos = 4.collect { |i|
+	    lfoBusses = numVoices.collect {Bus.control(Server.default, 1)};
+	    lfos = numVoices.collect { |i|
 	        { |lfoFreq|
 	            Out.kr(lfoBusses[i], SinOsc.kr(lfoFreq));
 	        }.play(target: lfoGroup);
 	    };
-	    timbres = 4.collect { |i|
-	      ( instrument: \form, freq: 440, amp: 1, pan: 0, out: bus, group: noteGroups[i],
+	    timbres = numVoices.collect { |i|
+	      ( instrument: \form, pan: 0, out: bus, group: noteGroups[i],
 	        a1: 0.1, d1: 0.3, s1: 0.5, r1: 0.4,
 	        a2: 0.3, d2: 0.5, s2: 0.8, r2: 0.4,
 	        f0Amp: 0.5,
 	        lfoBus: lfoBusses[i],
-	        f1: 450, f1Amp: 0.5, f1Res: 0.6, 
-	        f2: 1000, f2Amp: 0.0, f2Res: 0.1,
+	        f1: 450, f1Amp: 0.5, f1Res: 0.6, f1Modulator: 450, f1Index: 0,
+	        f2: 1000, f2Amp: 0.0, f2Res: 0.1, f2Index: 0,
 	        e1F0Amp: 0, e1F1: 0.5, e1F1Amp: 0, e1F2: 0, e1F2Amp: 0.5,
 	        e2F0Amp: 0, e2F1: 0.3, e2F1Amp: 0, e2F2: 1, e2F2Amp: 0,
 	        lfoF0Amp: 0, lfoF1:  -0.2, lfoF1Amp: 0, lfoF2: 0, lfoF2Amp: 0)
@@ -38,8 +41,8 @@ Engine_FormAndVoid : CroneEngine {
 	        a2=0.3, d2=0.5, s2=0.8, r2=0.4,
         	lfoBus,	
 	        f0Amp=0.5, 
-	        f1=450, f1Amp=0.5, f1Res=0.6, 
-	        f2=1000, f2Amp=0.0, f2Res=0.1,
+	        f1=450, f1Amp=0.5, f1Res=4, f1Modulator=450, f1Index=0,
+	        f2=1000, f2Amp=0.0, f2Res=3, f2Index=0, f2Gain=1,
 	        e1F0Amp=0, e1F1= 0.5, e1F1Amp=0, e1F2=0, e1F2Amp=0.5,
 	        e2F0Amp=0, e2F1=0.3, e2F1Amp=0, e2F2=1, e2F2Amp=0,
 	        lfoF0Amp=0, lfoF1= -0.2, lfoF1Amp=0, lfoF2=0, lfoF2Amp=0|
@@ -48,20 +51,21 @@ Engine_FormAndVoid : CroneEngine {
 	        var env2 = EnvGen.kr(Env.adsr(a2, d2, s2, r2), gate, doneAction: Done.none);
 	        var lfo = In.kr(lfoBus);
 	
-	        var f0AmpMod = f0Amp + (e1F0Amp*env1) + (e2F0Amp*env2) + (lfoF0Amp*lfo);
+	        var f0AmpMod = f0Amp.lag(0.1) + (e1F0Amp.lag(0.1)*env1) + (e2F0Amp.lag(0.1)*env2) + (lfoF0Amp.lag(0.1)*lfo);
 
-	        var f1AmpMod = f1Amp + (e1F1Amp*env1) + (e2F1Amp*env2) + (lfoF1Amp*lfo);
-	        var f1Mod = f1 + (f1*e1F1*env1) + (f1*e2F1*env2) + (f1*lfoF1*lfo);
+	        var f1AmpMod = f1Amp.lag(0.1) + (e1F1Amp.lag(0.1)*env1) + (e2F1Amp.lag(0.1)*env2) + (lfoF1Amp.lag(0.1)*lfo);
+	        var f1Mod = f1.lag(0.1)*(1 + (e1F1.lag(0.1)*env1) + (e2F1.lag(0.1)*env2) + (lfoF1.lag(0.1)*lfo));
 
-	        var f2AmpMod = f2Amp + (e1F2Amp*env1) + (e2F2Amp*env2) + (lfoF2Amp*lfo);
-	        var f2Mod = f2 + (f2*e1F2*env1) + (f2*e2F2*env2) + (f2*lfoF2*lfo);
+	        var f2AmpMod = f2Amp.lag(0.1) + (e1F2Amp.lag(0.1)*env1) + (e2F2Amp.lag(0.1)*env2) + (lfoF2Amp.lag(0.1)*lfo);
+	        var f2Mod = f2.lag(0.1)*(1 + (e1F2.lag(0.1)*env1) + (e2F2.lag(0.1)*env2) + (lfoF2.lag(0.1)*lfo));
 
-	        var fundamental = f0AmpMod*SinOsc.ar(freq);
 	        var imp = Impulse.ar(freq);
-	        var formant1 = f1AmpMod*SinGrain.ar(imp, f1Res*freq.reciprocal, f1Mod);
-	        var formant2 = f2AmpMod*SinGrain.ar(imp, f2Res*freq.reciprocal, f2Mod);
-	        var snd = (fundamental+formant1+formant2);
-	        Out.ar(out, Pan2.ar(0.3*amp*env1*snd, pan));
+	        var formant1 = f1AmpMod*FMGrain.ar(imp, f1Res*f1Mod.reciprocal, f1Mod, f1Modulator, f1Index);
+	        var formant2 = f2AmpMod*SinGrain.ar(imp, f2Res*f2Mod.reciprocal, f2Mod);
+	        var fundamental = f0AmpMod*SinOsc.ar(freq, pi*f2Index.lag(0.1)*formant2);
+	        
+	        var snd = (fundamental+formant1+(f2Gain*formant2));
+	        Out.ar(out, Pan2.ar(0.3*amp.lag(0.07)*env1*snd, pan));
         }).add;
         
         this.addCommand(\play, "ifff", { |msg|
@@ -90,7 +94,40 @@ Engine_FormAndVoid : CroneEngine {
 			});
 			// Set M to be the duration of a beat.
 			// beatDurBus.set(1/tempo);
-		});        
+		});
+		
+		this.addCommand(\noteOn, "iiff", { |msg|
+		    var timbre = msg[1].asInteger;
+		    var note = msg[2].asInteger;
+		    var freq = msg[3].asFloat;
+		    var amp = msg[4].asFloat;
+		    var proto = timbres[timbre];
+		    var controls = proto.asPairs;
+		    controls.addAll([\freq, freq, \amp, amp]);
+            noteTracker[timbre][note] = Synth(\form, controls, target: noteGroups[timbre]);
+		});
+        
+        this.addCommand(\noteOff, "ii", { |msg|
+            var timbre = msg[1].asInteger;
+            var note = msg[2].asInteger;
+            if (noteTracker[timbre].includesKey(note), {
+                noteTracker[timbre][note].set(\gate, 0);
+                noteTracker[timbre].removeAt(note);
+            });
+        });
+        
+        this.addCommand(\setAll, "sf", { |msg|
+            var key = msg[1].asString.asSymbol;
+            var val = msg[2].asFloat;
+            noteContainer.set(key, val);
+            timbres.do { |t, i|
+                if (key == \lfoFreq, {
+                    lfos[i].set(key, val);
+                }, {
+                    t[key] = val;
+                });
+            };
+        });        
         
         this.addCommand(\set, "isf", { |msg|
             var timbre = msg[1].asInteger;
@@ -101,6 +138,16 @@ Engine_FormAndVoid : CroneEngine {
             }, {
                 timbres[timbre][key] = val;
                 noteGroups[timbre].set(key, val);
+            });
+        });
+        
+        this.addCommand(\setNote, "iisf", { |msg|
+            var timbre = msg[1].asInteger;
+            var note = msg[2].asInteger;
+            var key = msg[3].asString.asSymbol;
+            var val = msg[4].asFloat;
+            if (noteTracker[timbre].includesKey(note), {
+                noteTracker[timbre][note].set(key, val);
             });
         });
         
