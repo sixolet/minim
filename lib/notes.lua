@@ -20,6 +20,7 @@ function set_up_timbre_attr(sect, timbre_n, name, key, cspec)
     if timbre_n < 0 then
         params:set_action(sect .. " " .. name, function(val)
             engine.setAll(key, val)
+            screen_dirty = true
         end)
         local p = params:lookup_param(sect .. " " .. name)
         function p:set_mpe(timbre, val)
@@ -28,6 +29,7 @@ function set_up_timbre_attr(sect, timbre_n, name, key, cspec)
     else
         params:set_action(sect .. " " .. name, function(val)
             engine.set(timbre_n, key, val)
+            screen_dirty = true
         end)        
     end
 
@@ -40,7 +42,7 @@ function set_up_chord_timbre(n, sect)
     if sect == nil then
         sect = "chord"
     end
-    params:add_group("chord timbre", 38)
+    params:add_group(sect .. " timbre", 38)
     params:add_separator("formants")
     local f1 = controlspec.FREQ:copy()
     f1.default = 700

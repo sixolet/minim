@@ -84,6 +84,103 @@ function process_midi(data)
   end
 end
 
+function shape()
+    local f1 = params:get("the formant 1")
+    local f1_mod = params:get("the formant 1 modulator")
+    local f1_index = params:get("the formant 1 index")
+    local f2 = params:get("the formant 2")
+    local len1 = params:get("the formant 1 waves")/f1
+    local len2 = params:get("the formant 2 waves")/f2
+    local window_len = math.max(len1, len2)
+    local amp1 = (
+        params:get("the formant 1 amp") + 
+        params:get("the sustain 1")*params:get("the env 1 to formant 1 amp") + 
+        params:get("the sustain 2")*params:get("the env 2 to formant 1 amp"))
+    local amp2 = params:get("the formant 2 gain")*(
+        params:get("the formant 2 amp") + 
+        params:get("the sustain 1")*params:get("the env 1 to formant 2 amp") + 
+        params:get("the sustain 2")*params:get("the env 2 to formant 2 amp"))
+    local one = function(t)
+        if t >= 0 and t <= len1 then
+            local modulator = math.sin(2*math.pi*f1_mod*t)
+            local window = (math.sin(math.pi*t/len1))^2
+            return window*math.sin(2*math.pi*f1*t + 2*math.pi*f1_index*modulator)
+        else
+            return 0
+        end
+    end
+    local two = function(t)
+        if t >= 0 and t <= len2 then
+            local window = (math.sin(math.pi*t/len2))^2
+            return window*math.sin(2*math.pi*f2*t)
+        else
+            return 0
+        end
+    end
+    local ret = {}
+    local highest = -1000
+    local lowest = 1000
+    for i=0,128,1 do
+        local t = window_len*(i-1)/128
+        ret[i] = amp1*one(t) + amp2*two(t)
+        if ret[i] > highest then highest = ret[i] end
+        if ret[i] < lowest then lowest = ret[i] end
+    end
+    for i=0,128,1 do
+        ret[i] = util.linlin(lowest, highest, 1, 63, ret[i])
+    end
+    ret.window_len = window_len
+    return ret
+end
+
+function redraw()
+    screen.clear()
+    local s = shape()
+    screen.aa(1)
+    screen.level(16)
+    screen.move(0,s[0])
+    for j=1,128,1 do
+        screen.line(j, s[j])
+    end
+    screen.stroke()
+    screen.move(105, 10)
+    screen.text(util.round(s.window_len*1000).. " ms")
+    screen.update()
+end
+
+k1 = 0
+k2 = 0
+k3 = 0
+
+function key(n,z)
+    if n == 1 then
+        k1 = z
+    elseif n == 2 then
+        k2 = z
+    elseif n == 3 then
+        k3 = z
+    end
+end
+
+function enc(n,d)
+    local f = n - 1
+    if k2 == 0 and k3 == 0 then
+        local name = "the formant "..f
+        local formant = params:get(name)
+        formant = formant*(1 + 0.01*d)
+        params:set(name, formant)
+    elseif k2 == 1 and k3 == 0 then
+        local name = "the formant "..f.." amp"
+        local amp = params:get(name)
+        params:set(name, amp + d/100)
+    elseif k2 == 0 and k3 == 1 then
+        local name = "the formant "..f.." waves"
+        local waves = params:get(name)
+        params:set(name, waves + d/10)
+    end
+    screen_dirty = true  
+end
+
 function init()
     midi_device = {} -- container for connected midi devices
     midi_device_names = {}
@@ -99,10 +196,22 @@ function init()
     params:set_action("midi target", midi_target)  
     params:add_number("main channel", "main channel", 1, 15, 1, nil, nil, false)
     params:add_number("first channel", "first channel", 1, 15, 2, nil, nil, false)
-    params:add_number("mpe channels", "mpe channels", 1, 8, 6, nil, nil, false)
+    params:add_number("mpe channels", "mpe channels", 1, 8, 7, nil, nil, false)
     params:add_number("bend range", "bend range", 1, 24, 12, nil, nil, false)
     params:add_binary("pressure", "pressure", "toggle", 1)
-    set_up_chord_timbre(-1, "timbre")
+    set_up_chord_timbre(-1, "the")
     params:read(1)
     params:bang()
+    screen_redraw_clock = clock.run(
+    function()
+      while true do
+        clock.sleep(1/10) 
+        if screen_dirty == true then
+          redraw()
+          screen_dirty = false
+        end
+      end
+    end
+    )
+    screen_dirty = true
 end
