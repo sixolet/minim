@@ -36,13 +36,17 @@ function set_up_timbre_attr(sect, timbre_n, name, key, cspec)
 end
 
 function set_up_chord_timbre(n, sect)
+    local num_params = 38
     if n == nil then
         n = 0
+    end
+    if n < 0 then
+        num_params = num_params + 2
     end
     if sect == nil then
         sect = "chord"
     end
-    params:add_group(sect .. " timbre", 38)
+    params:add_group(sect .. " timbre", num_params)
     params:add_separator("formants")
     local f1 = controlspec.MIDFREQ:copy()
     f1.default = 700
@@ -89,7 +93,15 @@ function set_up_chord_timbre(n, sect)
     set_up_timbre_attr(sect, n, "lfo to formant 1", "lfoF1", controlspec.new(-0.8, 2, 'lin', 0, 0.0))
     set_up_timbre_attr(sect, n, "lfo to formant 1 amp", "lfoF1Amp", controlspec.UNIPOLAR)
     set_up_timbre_attr(sect, n, "lfo to formant 2", "lfoF2", controlspec.new(-0.8, 2, 'lin', 0, 0))
-    set_up_timbre_attr(sect, n, "lfo to formant 2 amp", "lfoF2Amp", controlspec.new(0, 1, 'lin', 0, 0.0))    
+    set_up_timbre_attr(sect, n, "lfo to formant 2 amp", "lfoF2Amp", controlspec.new(0, 1, 'lin', 0, 0.0))
+    if n < 0 then
+        params:add_separator("quality")
+        params:add_option(sect .. " antialias", "antialias", {"off", "on"}, 1)
+        params:set_action(sect .. " antialias", function (aa) 
+            engine.setAll("model", aa)
+        end)
+    end
+
 end
 
 function set_up_arp_timbre()
