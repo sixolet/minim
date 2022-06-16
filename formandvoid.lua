@@ -4,10 +4,13 @@ include 'lib/notes'
 
 engine.name="FormAndVoid"
 
+PRESSURE_OPTIONS = {"none", "amp", "cc 1", "cc 1 + amp"}
+
 active_notes = {}
 for i=1,16,1 do
     active_notes[i] = {}
 end
+
 
 function midi_target(x)
   midi_device[target].event = nil
@@ -31,7 +34,25 @@ function process_midi(data)
       return
   end
   if d.type == "note_on" then
-    -- global
+    -- This is a guard against stuck notes. If we see more than one note on the same
+    -- channel and it isn't the main channel, and other channels are empty, it must be stuck.
+    
+    -- This is because MPE says to use an empty channel for new notes if such exists.
+    
+    if next(active_notes[d.ch]) ~= nil and d.ch ~= params:get("main channel") then
+        local first = params:get("first channel")
+        for i=first,first+params:get("mpe channels")-1,1 do
+            if i ~= d.ch and next(active_notes[i]) == nil then
+                for note, freq in pairs(active_notes[d.ch]) do
+                    engine.noteOff(timbre, note)
+                    count = count - 1
+                    print("stuck off", timbre, note)
+                end
+                break
+            end
+        end
+    end
+    
     active_notes[d.ch][d.note] = music.note_num_to_freq(d.note)
     engine.noteOn(timbre, d.note, music.note_num_to_freq(d.note), d.vel/127)
     count = count + 1
@@ -48,16 +69,27 @@ function process_midi(data)
         engine.setNote(timbre, note, "freq", new_freq)
     end
   elseif d.type == "key_pressure" then
-      if params:get("pressure") > 0 then
+      if params:get("pressure") == 2 or params:get("pressure") == 4 then
         for note, freq in pairs(active_notes[d.ch]) do
             engine.setNote(timbre, note, "amp", d.val/127)
         end
       end
+      if params:get("pressure") == 4 or params:get("pressure") == 3 then
+          d.cc = 1
+      end
   elseif d.type == "channel_pressure" then
-      if params:get("pressure") > 0 then
+      if params:get("pressure") == 2 or params:get("pressure") == 3 then
           engine.set(timbre, "amp", d.val/127)
       end
+      if params:get("pressure") == 4 or params:get("pressure") == 3 then
+          d.cc = 1
+      end      
   elseif d.type == "cc" then
+      -- pass handled next
+  else
+      print(d.type)      
+  end
+  if d.type == "cc" or d.cc == 1 then
       local r = norns.pmap.rev[target][params:get("main channel")][d.cc]
       local v = d.val
       if r ~= nil and d.ch ~= params:get("main channel") then
@@ -79,8 +111,6 @@ function process_midi(data)
             end
         end
       end
-  else
-      print(d.type)
   end
 end
 
@@ -198,7 +228,7 @@ function init()
     params:add_number("first channel", "first channel", 1, 15, 2, nil, nil, false)
     params:add_number("mpe channels", "mpe channels", 1, 8, 7, nil, nil, false)
     params:add_number("bend range", "bend range", 1, 24, 12, nil, nil, false)
-    params:add_binary("pressure", "pressure", "toggle", 1)
+    params:add_option("pressure", "pressure", PRESSURE_OPTIONS, 2)
     set_up_chord_timbre(-1, "the")
     params:read(1)
     params:bang()

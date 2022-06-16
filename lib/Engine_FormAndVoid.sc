@@ -65,7 +65,8 @@ Engine_FormAndVoid : CroneEngine {
 	        var fundamental = f0AmpMod*SinOsc.ar(freq, pi*f2Index.lag(0.1)*formant2);
 	        
 	        var snd = (fundamental+formant1+(f2Gain*formant2));
-	        Out.ar(out, Pan2.ar(0.3*amp.lag(0.07)*env1*snd, pan));
+	        snd = HPF.ar(snd, 0.7*freq);
+	        Out.ar(out, Pan2.ar(0.3*Gate.kr(amp.lag(0.07), gate)*env1*snd, pan));
         }).add;
         
         this.addCommand(\play, "ifff", { |msg|
